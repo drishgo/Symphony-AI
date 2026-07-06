@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send, Bot, User, Sparkles, Paperclip, FileText, X,
   ChevronLeft, ChevronRight, Plus, Search, Settings, Info,
-  MessageSquare, Trash2, Loader2, LogOut
+  MessageSquare, Trash2, Loader2, LogOut,
+  Users, Link2, ChevronDown, UserMinus, UserPlus, Copy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,32 @@ type Conversation = {
   updated_at: string;
 };
 
+type GroupMember = {
+  email: string;
+  name: string;
+  isCreator?: boolean;
+};
+
+type GroupChatEntry = {
+  id: string;
+  role: "user" | "system";
+  content: string;
+  senderName?: string;
+  senderEmail?: string;
+  timestamp: string;
+};
+
+type GroupChat = {
+  id: string;
+  name: string;
+  createdAt: string;
+  creatorEmail: string;
+  creatorName: string;
+  members: GroupMember[];
+  messages: GroupChatEntry[];
+  inviteLink: string;
+};
+
 export default function ChatInterface() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
@@ -52,7 +79,26 @@ export default function ChatInterface() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Group Chats
+  const [groupChats, setGroupChats] = useState<GroupChat[]>([]);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [gcInput, setGcInput] = useState("");
+
+  // UI State
+  const [showNewChatMenu, setShowNewChatMenu] = useState(false);
+  const [showCreateGcDialog, setShowCreateGcDialog] = useState(false);
+  const [newGcName, setNewGcName] = useState("");
+  const [showChatSettings, setShowChatSettings] = useState(false);
+  const [showPeopleDialog, setShowPeopleDialog] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [showHeaderNewChatMenu, setShowHeaderNewChatMenu] = useState(false);
+  const [addMemberEmail, setAddMemberEmail] = useState("");
+  const [addMemberName, setAddMemberName] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const isNewChat = messages.length === 0;
+  const activeGroup = groupChats.find(g => g.id === activeGroupId) ?? null;
+  const isGroupView = !!activeGroupId;
 
   // ─── Auth Check ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -219,6 +265,117 @@ export default function ChatInterface() {
     else router.push("/login");
   };
 
+  // ─── Group Chat Handlers ───────────────────────────────────────────────────
+  const createGroupChat = () => {
+    if (!newGcName.trim()) return;
+    const now = new Date().toISOString();
+    const id = `gc-${Date.now()}`;
+    const inviteLink = `${window.location.origin}/join/${id}`;
+    const systemMsg: GroupChatEntry = {
+      id: `sys-${Date.now()}`,
+      role: "system",
+      content: `"${newGcName.trim()}" created by ${userName}`,
+      timestamp: now,
+    };
+    const newGroup: GroupChat = {
+      id,
+      name: newGcName.trim(),
+      createdAt: now,
+      creatorEmail: userEmail,
+      creatorName: userName,
+      inviteLink,
+      members: [{ email: userEmail, name: userName, isCreator: true }],
+      messages: [systemMsg],
+    };
+    setGroupChats(prev => [newGroup, ...prev]);
+    setActiveGroupId(id);
+    setActiveConvId(null);
+    setMessages([]);
+    setNewGcName("");
+    setShowCreateGcDialog(false);
+  };
+
+  const sendGroupMessage = () => {
+    if (!gcInput.trim() || !activeGroupId) return;
+    const now = new Date().toISOString();
+    const entry: GroupChatEntry = {
+      id: `msg-${Date.now()}`,
+      role: "user",
+      content: gcInput.trim(),
+      senderName: userName,
+      senderEmail: userEmail,
+      timestamp: now,
+    };
+    setGroupChats(prev => prev.map(g =>
+      g.id === activeGroupId ? { ...g, messages: [...g.messages, entry] } : g
+    ));
+    setGcInput("");
+  };
+
+  const leaveGroupChat = () => {
+    if (!activeGroupId || !activeGroup) return;
+    const now = new Date().toISOString();
+    const leaveMsg: GroupChatEntry = {
+      id: `sys-${Date.now()}`,
+      role: "system",
+      content: `${userName} left the group`,
+      timestamp: now,
+    };
+    setGroupChats(prev => prev.map(g =>
+      g.id === activeGroupId
+        ? { ...g, members: g.members.filter(m => m.email !== userEmail), messages: [...g.messages, leaveMsg] }
+        : g
+    ));
+    setActiveGroupId(null);
+    setShowChatSettings(false);
+  };
+
+  const deleteGroupChat = () => {
+    if (!activeGroupId) return;
+    setGroupChats(prev => prev.filter(g => g.id !== activeGroupId));
+    setActiveGroupId(null);
+    setShowChatSettings(false);
+  };
+
+  const addGroupMember = () => {
+    if (!addMemberEmail.trim() || !activeGroupId) return;
+    const now = new Date().toISOString();
+    const newMember: GroupMember = { email: addMemberEmail.trim(), name: addMemberName.trim() || addMemberEmail.trim() };
+    const joinMsg: GroupChatEntry = {
+      id: `sys-${Date.now()}`,
+      role: "system",
+      content: `${newMember.name} joined the chat`,
+      timestamp: now,
+    };
+    setGroupChats(prev => prev.map(g =>
+      g.id === activeGroupId
+        ? { ...g, members: [...g.members, newMember], messages: [...g.messages, joinMsg] }
+        : g
+    ));
+    setAddMemberEmail("");
+    setAddMemberName("");
+  };
+
+  const removeGroupMember = (email: string) => {
+    if (!activeGroupId) return;
+    setGroupChats(prev => prev.map(g =>
+      g.id === activeGroupId
+        ? { ...g, members: g.members.filter(m => m.email !== email) }
+        : g
+    ));
+  };
+
+  const openGroupChat = (g: GroupChat) => {
+    setActiveGroupId(g.id);
+    setActiveConvId(null);
+    setMessages([]);
+  };
+
+  const formatTs = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
   // ─── Filter conversations ──────────────────────────────────────────────────
   const filteredConversations = conversations.filter((c) =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -265,10 +422,39 @@ export default function ChatInterface() {
               </div>
             </div>
 
-            {/* New Chat */}
-            <button onClick={startNewChat} className="w-full flex items-center gap-3 px-4 py-3 bg-black text-[#E2FF00] border-2 border-black font-bold uppercase tracking-widest text-sm hover:bg-white hover:text-black transition-colors shadow-[2px_2px_0px_#000] active:translate-y-0.5 mb-4">
-              <Plus className="w-4 h-4 shrink-0" /> New Chat
-            </button>
+            {/* New Chat Dropdown */}
+            <div className="relative mb-4">
+              <div className="flex border-2 border-black shadow-[2px_2px_0px_#000]">
+                <button
+                  onClick={() => { startNewChat(); setActiveGroupId(null); }}
+                  className="flex-1 flex items-center gap-3 px-4 py-3 bg-black text-[#E2FF00] font-bold uppercase tracking-widest text-sm hover:bg-white hover:text-black transition-colors active:translate-y-0.5"
+                >
+                  <Plus className="w-4 h-4 shrink-0" /> New Chat
+                </button>
+                <button
+                  onClick={() => setShowNewChatMenu(v => !v)}
+                  className="px-3 bg-black text-[#E2FF00] border-l-2 border-[#E2FF00]/30 hover:bg-white hover:text-black transition-colors"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </div>
+              {showNewChatMenu && (
+                <div className="absolute left-0 right-0 top-full z-50 bg-black border-2 border-[#E2FF00] shadow-[4px_4px_0px_#E2FF00]">
+                  <button
+                    onClick={() => { startNewChat(); setActiveGroupId(null); setShowNewChatMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-[#E2FF00] font-bold uppercase tracking-widest text-xs hover:bg-[#E2FF00] hover:text-black transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" /> New Chat
+                  </button>
+                  <button
+                    onClick={() => { setShowCreateGcDialog(true); setShowNewChatMenu(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-[#E2FF00] font-bold uppercase tracking-widest text-xs hover:bg-[#E2FF00] hover:text-black transition-colors border-t border-[#E2FF00]/20"
+                  >
+                    <Users className="w-4 h-4" /> New Group Chat
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Search */}
             <div className="relative mb-3">
@@ -314,7 +500,32 @@ export default function ChatInterface() {
               ))}
             </div>
 
-            {/* User Info at bottom */}
+            {/* ── Group Chats Section ─────────────────────────────── */}
+            <div className="mt-3 mb-1 flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-black/60" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-black/60">Group Chats</span>
+              <div className="flex-1 h-px bg-black/20" />
+            </div>
+            <div className="overflow-y-auto space-y-1 pr-1 custom-scrollbar-dark" style={{ maxHeight: "160px" }}>
+              {groupChats.length === 0 && (
+                <div className="text-center py-3 text-black/40 text-[10px] font-bold uppercase tracking-widest">No group chats yet</div>
+              )}
+              {groupChats.map(g => (
+                <div
+                  key={g.id}
+                  onClick={() => openGroupChat(g)}
+                  className={`group flex items-center gap-2 px-3 py-2.5 cursor-pointer border-2 transition-all ${activeGroupId === g.id ? "bg-black text-[#E2FF00] border-black" : "bg-transparent border-transparent hover:bg-black/10 hover:border-black/30"
+                    }`}
+                >
+                  <Users className={`w-4 h-4 shrink-0 ${activeGroupId === g.id ? "text-[#E2FF00]" : "text-black"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold uppercase truncate ${activeGroupId === g.id ? "text-[#E2FF00]" : "text-black"}`}>{g.name}</p>
+                    <p className={`text-[10px] font-mono ${activeGroupId === g.id ? "text-[#E2FF00]/60" : "text-black/50"}`}>{g.members.length} member{g.members.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <div className="mt-4 pt-4 border-t-2 border-black/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
@@ -439,7 +650,7 @@ export default function ChatInterface() {
             <div className="max-w-4xl mx-auto w-full">
               <form onSubmit={handleSend} className="flex flex-col w-full bg-black border-2 border-white shadow-[2px_2px_0px_#E2FF00] focus-within:shadow-[4px_4px_0px_#E2FF00] transition-all duration-200">
                 <div className="flex w-full items-center p-1">
-                  <input type="file" hidden accept=".pdf,.doc,.docx,.txt" ref={fileInputRef} onChange={(e) => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]); }} />
+                  <input type="file" hidden accept=".pdf,.doc,.docx,.txt,.html,.htm" ref={fileInputRef} onChange={(e) => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]); }} />
                   <Button type="button" size="icon" variant="ghost" className="h-12 w-12 rounded-none text-white hover:text-black hover:bg-[#E2FF00] transition-colors shrink-0" onClick={() => fileInputRef.current?.click()}>
                     <Paperclip className="w-5 h-5" />
                   </Button>

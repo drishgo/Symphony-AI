@@ -10,14 +10,14 @@ class Agent:
         self.client = LLMClient()
         self.memory = ConversationMemory(self.system_prompt)
     
-    def run(self,user_input):
+    def run(self,user_input,attachments=None):
         self.memory.add("user",user_input)
 
         output = self.client.generate(self.memory.get())
 
         self.memory.add("assistant",output)
-
-        tool_result = execute_tool(output,self.tools)
+        
+        tool_result = execute_tool(output,self.tools,attachments)
         
         if tool_result is not None:
             tool_message = f"this is the output of the tool: {tool_result}, process and structure it in a beautiful way"

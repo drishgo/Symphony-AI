@@ -15,7 +15,7 @@ load_dotenv()
 # #
 class LLMClient:
     def __init__(self):
-        self.client = InferenceClient(model="meta-llama/Llama-3.3-70B-Instruct" ,api_key=os.getenv("HF_TK"))
+        self.client = InferenceClient(model=os.getenv("HF_LLM_MODEL") ,api_key=os.getenv("HF_TK"))
         # self.memory = ConversationMemory(system_prompt)
         print("Agent Created")
     

@@ -1,4 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+import tempfile
+import os
+import shutil
 from typing import Optional, List
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -71,16 +74,36 @@ async def chat(
         finally:
             db.close()
 
+    temp_path = None
     try:
         context = ""
+        attachments = []
+
         if request_file:
             file_content = await request_file.read()
+
+            # ── Parse text context so the agent can reason about the file ──
             if request_file.filename.endswith(".txt"):
                 context = file_content.decode("utf-8")
+            elif request_file.filename.endswith(".html") or request_file.filename.endswith(".htm"):
+                context = file_content.decode("utf-8", errors="ignore")
             elif request_file.filename.endswith(".docx"):
                 context = docxParser(file_content)
             elif request_file.filename.endswith(".pdf"):
                 context = pdfParser(file_content)
+
+            # ── Also save bytes to a temp file so the email tool can attach it ──
+            suffix = os.path.splitext(request_file.filename)[1] or ""
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(file_content)
+                temp_path = tmp.name
+            # Rename so the attachment filename shown in the email matches the original
+            named_path = os.path.join(os.path.dirname(temp_path),
+                                      request_file.filename)
+            shutil.move(temp_path, named_path)
+            temp_path = named_path
+            attachments = [temp_path]
+
             message = f"<user_input> User Message: {request_Message}\n\nDocument Context: {context} </user_input>"
         else:
             message = f"<user_input>\n{request_Message}\n</user_input>"
@@ -88,11 +111,18 @@ async def chat(
         if user_context:
             message = f"<user_context>\n{user_context}</user_context>\n{message}"
 
-        result = agent.run(message)
+        result = agent.run(message, attachments=attachments if attachments else None)
         return ChatResponse(response=result)
     except Exception as e:
         logging.error(f"Error during agent execution: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up the temp file regardless of success or failure
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
