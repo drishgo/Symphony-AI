@@ -1,6 +1,6 @@
-# ⚙️ Servix — Autonomous AI Agent
+# ⚙️ Symphony AI — Autonomous AI Agent
 
-**Servix** is a full-stack, production-grade AI Agent built from scratch in Python — no LangChain, no LlamaIndex. It features a complete authentication system, persistent chat history, user profile memory, and a stunning Neo-Brutalist web interface.
+**Symphony** is a full-stack, production-grade AI Agent built from scratch in Python — no LangChain, no LlamaIndex. It features a complete authentication system, persistent chat history, user profile memory, and a stunning Neo-Brutalist web interface.
 
 > Built to demystify Agentic AI while delivering professional backend engineering patterns.
 
@@ -21,7 +21,7 @@
 
 ## 🏗️ Architecture
 
-Servix runs an improvised **ReAct (Reason + Act)** loop — entirely hand-coded orchestration with no framework abstractions.
+Symphony runs an improvised **ReAct (Reason + Act)** loop — entirely hand-coded orchestration with no framework abstractions.
 
 ```
 User Request
